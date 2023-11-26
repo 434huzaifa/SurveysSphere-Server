@@ -4,6 +4,9 @@ const cors = require('cors');
 const jwt = require("jsonwebtoken")
 const cookie_pares = require("cookie-parser")
 const mongoose = require('mongoose');
+const cc = require("node-console-colors");
+const { Vote, Survey, Comment, MyUser } = require('./Schema');
+
 const app = express()
 const port = process.env.PORT || 5353
 app.use(cookie_pares())
@@ -14,12 +17,12 @@ app.use(cors({
     credentials: true
 }));
 app.use(express.json());
-const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@saaddb.bmj48ga.mongodb.net/SurveySphere/?retryWrites=true&w=majority`
-mongoose.connect(uri).then(()=>console.log("Connected")).catch(err=>console.log(err));
+const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@saaddb.bmj48ga.mongodb.net/SurveySphere?retryWrites=true&w=majority`
+mongoose.connect(uri)
 
 async function logger(req, res, next) {
     let date = new Date()
-    console.log(date.toLocaleString("en-US"), req.method, req.url);
+    console.log(cc.set("fg_yellow", date.toLocaleString("en-US"), cc.set("fg_purple", req.method), cc.set("fg_cyan", req.url)));
     next()
 }
 const isThisToken = async (req, res, next) => {
@@ -38,8 +41,43 @@ const isThisToken = async (req, res, next) => {
 
 async function run() {
     try {
+        app.post('/insertuser', logger, async (req, res) => {
+            const data = req.body
+            try {
+                const result = await MyUser.create(data)
+                res.status(201).send(result)
+            } catch (e) {
+                console.log(`The Error is:${e.message}`);
+                res.status(500).send(`${e.message}`)
+            }
+        })
+        app.get('/getrole', logger, async (req, res) => {
+            try {
+                const user = await MyUser.findOne({ email: req.query.mail })
+                if (user) {
+                    res.send(user.role)
+                } else {
+                    res.status(401).send("unauthorized")
+                }
+            } catch (error) {
+                console.log(`The Error is:${e.message}`);
+            }
+
+        })
+        app.post("/insertsurvey", logger, isThisToken, async (req, res) => {
+            let data = req.body
+            data.createdby = req.user.userid
+            let result=await Survey.create(data)
+            res.status(201).send(result)
+        })
+        app.get("/latestsurvey",logger,async(req,res)=>{
+            let result=await Survey.find().limit(6)
+            res.status(200).send(result)
+        })
         app.post('/jsonwebtoken', logger, async (req, res) => {
             const user = req.body
+            const userid = await MyUser.findOne({ email: user.email })
+            user.userid = userid
             const token = jwt.sign(user, process.env.TOKEN, { expiresIn: '1h' })
             res.cookie('huzaifa', token, {
                 httpOnly: true,
