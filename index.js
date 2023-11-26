@@ -38,9 +38,63 @@ const isThisToken = async (req, res, next) => {
         next()
     })
 }
+const isMightToken = async (req, res, next) => {
+    const token = req?.cookies?.huzaifa;
+    jwt.verify(token, process.env.TOKEN, (error, decoded) => {
+    req.user = decoded
+    next()
+    })
+}
 
 async function run() {
     try {
+        app.post('/changelike', logger, isThisToken, async (req, res) => {
+            let data = req.body
+            let vote = await Vote.isExist(data.survey, req.user.userid);
+            if (vote.length == 0) {
+                if (data.value == 1) {
+                    data.like = true
+                } else {
+                    data.like = false
+                }
+                data.user = req.user.userid
+                let vote_entry = await Vote.create(data)
+                res.status(201).send(vote_entry)
+            } else {
+                vote = vote[0]
+                if (data.value == 1) {
+                    vote.like = true
+                } else {
+                    vote.like = false
+                }
+                vote.save()
+
+            }
+            res.send({ msg: "hello" })
+
+        })
+        app.get("/getsurvey", logger,isMightToken, async (req, res) => {
+            const id = req.query.id
+            const result = await Survey.findById(id).populate("createdby").lean() // lean makes it normal object or array. otherwise it will be immutable
+            let isLike=0
+            if (req.user == undefined) {
+                isLike = 0
+            } else {
+                let vote = await Vote.isExist(id, req.user.userid);
+                if (vote.length == 0) {
+                    isLike = 1
+                } else {
+                    vote = vote[0]
+                if (vote.like) {
+                    isLike = 1
+                } else {
+                    isLike = 2
+                }
+                }
+            }
+            result.isLike=isLike
+            res.send(result)
+        })
         app.post('/insertuser', logger, async (req, res) => {
             const data = req.body
             try {
@@ -67,17 +121,17 @@ async function run() {
         app.post("/insertsurvey", logger, isThisToken, async (req, res) => {
             let data = req.body
             data.createdby = req.user.userid
-            let result=await Survey.create(data)
+            let result = await Survey.create(data)
             res.status(201).send(result)
         })
-        app.get("/latestsurvey",logger,async(req,res)=>{
-            let result=await Survey.find().limit(6)
+        app.get("/latestsurvey", logger, async (req, res) => {
+            let result = await Survey.find().limit(6)
             res.status(200).send(result)
         })
         app.post('/jsonwebtoken', logger, async (req, res) => {
             const user = req.body
             const userid = await MyUser.findOne({ email: user.email })
-            user.userid = userid
+            user.userid = userid._id
             const token = jwt.sign(user, process.env.TOKEN, { expiresIn: '1h' })
             res.cookie('huzaifa', token, {
                 httpOnly: true,

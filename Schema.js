@@ -68,14 +68,26 @@ const voteSchema=new mongo.Schema({
         type:mongo.Types.ObjectId,
         ref:"MyUser"
     },
-    option:Boolean,
+    option:{
+        type:Boolean,
+        default:null,
+    },
+    like:{
+        type:Boolean,
+        default:null
+    },
     survey:{
         type:mongo.Types.ObjectId,
         ref:"Survey"
-    }
+    },
+
 },{
     timestamps:true
 })
+voteSchema.statics.isExist= function (surveyid,userid) {
+    return  this.where("user").equals(userid).where("survey").equals(surveyid).limit(1)
+}
+
 voteSchema.post("save",humanizeErrors)
 voteSchema.post("update",humanizeErrors)
  const Vote=mongo.model("Vote",voteSchema)
