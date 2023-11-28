@@ -7,6 +7,10 @@ const userSechema=new mongo.Schema({
         unique:true,
         lowercase:true
     },
+    image:{
+        type:String,
+        default:null
+    },
     role:String,
 },{
     timestamps:true
@@ -20,14 +24,25 @@ const commentSchema=new mongo.Schema({
         type:mongo.Types.ObjectId,
         ref:"MyUser"
     },
-    text:String
+    text:String,
+    survey:{
+        type:mongo.Types.ObjectId,
+        ref:"Survey"
+    },
 },{
     timestamps:true
+})
+commentSchema.post("save",async function(doc) {
+    let survey=await Survey.findById(doc.survey)
+    survey.totalcomment+=1
+    survey.comment.push(doc._id)
+    survey.save()
+
 })
 commentSchema.post("save",humanizeErrors)
 commentSchema.post("update",humanizeErrors)
 
- const Comment=mongo.model("Comment",commentSchema)
+const Comment=mongo.model("Comment",commentSchema)
 
 const surveySchema=new mongo.Schema({
     title:String,
@@ -40,6 +55,14 @@ const surveySchema=new mongo.Schema({
         type:Number,
         default:0
     },
+    totalvote:{
+        type:Number,
+        default:0
+    },
+    totalcomment:{
+        type:Number,
+        default:0
+    },
     category:String,
     createdby:{
         type:mongo.Types.ObjectId,
@@ -49,11 +72,19 @@ const surveySchema=new mongo.Schema({
         type:[mongo.Types.ObjectId],
         default:[],
         ref:"Comment"
+    },
+    questions:{
+        type:[String],
+        default:[]
+    },
+    expire:{
+        type:Date,
+        default:()=>Date.now()
     }
 },{
     timestamps:true
 })
-
+surveySchema.index({title:1,category:1})
 surveySchema.pre("save",function(next) {
     this.like=parseInt(this.like)
     this.dislike=parseInt(this.dislike)
@@ -61,15 +92,16 @@ surveySchema.pre("save",function(next) {
 })
 surveySchema.post("save",humanizeErrors)
 surveySchema.post("update",humanizeErrors)
- const Survey=mongo.model("Survey",surveySchema)
+
+const Survey=mongo.model("Survey",surveySchema)
 
 const voteSchema=new mongo.Schema({
     user:{
         type:mongo.Types.ObjectId,
         ref:"MyUser"
     },
-    option:{
-        type:Boolean,
+    options:{
+        type:[Boolean],
         default:null,
     },
     like:{
@@ -84,13 +116,37 @@ const voteSchema=new mongo.Schema({
 },{
     timestamps:true
 })
+voteSchema.post("save",async function (doc) {
+    let survey=await Survey.findById(doc.survey)
+    let like=await Vote.where("like").equals(true).where("survey").equals(doc.survey).countDocuments()
+    let dislike=await Vote.where("like").equals(false).where("survey").equals(doc.survey).countDocuments()
+    let votes=await Vote.where({
+        $expr: { $gt: [{ $size: '$options' }, 0] }
+      }).where("survey").equals(doc.survey).countDocuments()
+    survey.like=like
+    survey.dislike=dislike
+    survey.totalvote=votes
+    survey.save()
+    
+})
 voteSchema.statics.isExist= function (surveyid,userid) {
     return  this.where("user").equals(userid).where("survey").equals(surveyid).limit(1)
 }
 
 voteSchema.post("save",humanizeErrors)
 voteSchema.post("update",humanizeErrors)
- const Vote=mongo.model("Vote",voteSchema)
+const Vote=mongo.model("Vote",voteSchema)
+
+reportSchema=mongo.Schema({
+    survey:{
+        type:mongo.Types.ObjectId,
+        ref:"Survey"
+    },
+    user:{
+        type:mongo.Types.ObjectId,
+        ref:"MyUser"
+    },
+})
 
 module.exports={
     Vote:Vote,

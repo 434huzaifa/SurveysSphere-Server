@@ -5,6 +5,8 @@ const jwt = require("jsonwebtoken")
 const cookie_pares = require("cookie-parser")
 const mongoose = require('mongoose');
 const cc = require("node-console-colors");
+const moment = require("moment")
+const fs = require('fs');
 const { Vote, Survey, Comment, MyUser } = require('./Schema');
 
 const app = express()
@@ -19,6 +21,10 @@ app.use(cors({
 app.use(express.json());
 const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@saaddb.bmj48ga.mongodb.net/SurveySphere?retryWrites=true&w=majority`
 mongoose.connect(uri)
+
+
+
+
 
 async function logger(req, res, next) {
     let date = new Date()
@@ -40,14 +46,122 @@ const isThisToken = async (req, res, next) => {
 }
 const isMightToken = async (req, res, next) => {
     const token = req?.cookies?.huzaifa;
+    if (!token) {
+        req.user = undefined
+        return
+    }
     jwt.verify(token, process.env.TOKEN, (error, decoded) => {
-    req.user = decoded
-    next()
+        req.user = decoded
+        next()
     })
 }
 
+
 async function run() {
     try {
+        app.get('/surveychart', logger, async (req, res) => {
+            const survey = req.query.id
+            const votes = await Vote.where("survey").equals(survey).lean()
+            let data = new Array()
+            data.push(new Array("Options", "True", "False"))
+            if (votes.length != 0) {
+
+                for (let index = 0; index < votes[0].options.length; index++) {
+                    data.push(new Array(`Q${index + 1}`, 0, 0))
+                }
+                console.log(data);
+                for (const iterator of votes) {
+                    for (let index = 0; index < iterator.options.length; index++) {
+                        const element = iterator.options[index];
+                        if (element != null) {
+                            if (element) {
+                                data[index + 1][1] += 1
+                            } else {
+                                data[index + 1][2] += 1
+                            }
+                        }
+
+                    }
+                }
+            }
+            res.send(data)
+
+
+        })
+        app.post('/vote', logger, isThisToken, async (req, res) => {
+            const data = req.body
+            let vote = await Vote.isExist(data.survey, req.user.userid);
+            data.options = []
+            for (let index = 0; index < parseInt(data.qsize); index++) {
+                const element = data[String(index)]
+                if (element == "false") {
+                    data.options.push(false)
+                } else {
+                    data.options.push(true)
+                }
+                delete data[String(index)]
+            }
+            delete data.qsize
+            data.user = req.user.userid
+            if (vote.length == 0) {
+                let vote_entry = await Vote.create(data)
+                res.status(201).send(vote_entry)
+            } else {
+                vote = vote[0]
+                vote.options = data.options
+                vote.save()
+                res.status(200).send({ msg: "Updated" })
+            }
+        })
+        app.get('/huazifatest', logger, async (req, res) => {
+            let exp = moment().add(1, 'd').toDate()
+            console.log(exp);
+            const alldata = await Survey.find()
+            for (const iterator of alldata) {
+                iterator.expire = exp
+                iterator.save()
+            }
+            // const filePath = 'G:/OneDrive - MSFT/Huzaifa/CODE/19_11_test/data.json';
+            // fs.readFile(filePath, 'utf8', async (err, data) => {
+            //     if (err) {
+            //       console.error('Error reading JSON file:', err);
+            //       res.status(500).send('Internal Server Error');
+            //       return;
+            //     }
+
+            //     const jsonData = JSON.parse(data);
+            //     let count=0
+            //     for (const iterator of jsonData) {
+            //         let randomUser = await MyUser.aggregate([{ $sample: { size: 1 } }]);
+            //         iterator.createdby=randomUser._id
+            //         await Survey.create(iterator)
+            //         count++
+            //     }
+            //     res.json({count});
+            //   });
+            res.send({ msg: "good luck" })
+        })
+        app.get("/getallsurvey", logger, async (req, res) => {
+            console.log(req.query);
+            let result = null
+            if (Object.keys(req.query).length != 0 && req.query?.category) {
+                let cate = req.query.category.split(",")
+                let query = Survey.where("category").in(cate)
+                if (req.query.keyword != '') {
+                    query.where("title").regex(new RegExp(req.query.keyword, 'i'))
+                }
+                query.sort(`${req.query.asc == "true" ? "totalvote" : "-totalvote"}`).select("-createdby -category -comment -questions")
+                console.log(query.getFilter());
+                console.log(query.getOptions());
+                let searchresult = await query.exec()
+                console.log(searchresult.length);
+                res.send(searchresult)
+            } else {
+                let result = await Survey.find().sort(`${req.query.asc == "true" ? "totalvote" : "-totalvote"}`).select("-createdby -category -comment -questions")
+                res.send(result)
+            }
+
+        })
         app.post('/changelike', logger, isThisToken, async (req, res) => {
             let data = req.body
             let vote = await Vote.isExist(data.survey, req.user.userid);
@@ -68,31 +182,54 @@ async function run() {
                     vote.like = false
                 }
                 vote.save()
-
+                res.status(200).send({ msg: "Updated" })
             }
-            res.send({ msg: "hello" })
 
         })
-        app.get("/getsurvey", logger,isMightToken, async (req, res) => {
+        app.post("/setcomment", logger, isThisToken, async (req, res) => {
+            const data = req.body
+            data.user = req.user.userid
+            const result = await Comment.create(data)
+            res.status(201).send(result)
+
+        })
+        app.get("/getcomment", logger, async (req, res) => {
+            const id = req.query.id
+            const comments = await Comment.where("survey").equals(id).populate({
+                path: "user",
+                select: "name image -_id"
+            }).select("user text -_id").lean()
+            res.send(comments)
+        })
+        app.get("/getsurvey", logger, isMightToken, async (req, res) => {
             const id = req.query.id
             const result = await Survey.findById(id).populate("createdby").lean() // lean makes it normal object or array. otherwise it will be immutable
-            let isLike=0
+            let isLike = 0
+            let options = null
             if (req.user == undefined) {
                 isLike = 0
             } else {
                 let vote = await Vote.isExist(id, req.user.userid);
                 if (vote.length == 0) {
-                    isLike = 1
+                    isLike = 0
+
                 } else {
                     vote = vote[0]
-                if (vote.like) {
-                    isLike = 1
-                } else {
-                    isLike = 2
-                }
+                    if (vote.options.length != 0) {
+                        options = vote.options
+                    }
+                    if (vote.like) {
+                        isLike = 1
+                    } else if (vote.like == null) {
+                        isLike = 0
+                    }
+                    else {
+                        isLike = 2
+                    }
                 }
             }
-            result.isLike=isLike
+            result.isLike = isLike
+            result.options = options
             res.send(result)
         })
         app.post('/insertuser', logger, async (req, res) => {
@@ -118,11 +255,21 @@ async function run() {
             }
 
         })
+
         app.post("/insertsurvey", logger, isThisToken, async (req, res) => {
             let data = req.body
+            data.expire = moment(data.expire, "MMMM DD, YYYY").toDate()
             data.createdby = req.user.userid
+            data.question = []
+            for (let index = 0; index < parseInt(data.qsize); index++) {
+                const element = data[`q${index}`]
+                data.question.push(element)
+                delete data[`q${index}`]
+            }
+            delete data.qsize
             let result = await Survey.create(data)
             res.status(201).send(result)
+            // res.status(201).send({msg:"msg"})
         })
         app.get("/latestsurvey", logger, async (req, res) => {
             let result = await Survey.find().limit(6)
