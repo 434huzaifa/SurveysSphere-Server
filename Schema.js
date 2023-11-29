@@ -80,6 +80,14 @@ const surveySchema=new mongo.Schema({
     expire:{
         type:Date,
         default:()=>Date.now()
+    },
+    isPublish:{
+        type:Boolean,
+        default:false
+    },
+    reason:{
+        type:String,
+        default:null
     }
 },{
     timestamps:true
@@ -137,7 +145,7 @@ voteSchema.post("save",humanizeErrors)
 voteSchema.post("update",humanizeErrors)
 const Vote=mongo.model("Vote",voteSchema)
 
-reportSchema=mongo.Schema({
+const archiveSchema=new mongo.Schema({
     survey:{
         type:mongo.Types.ObjectId,
         ref:"Survey"
@@ -146,11 +154,26 @@ reportSchema=mongo.Schema({
         type:mongo.Types.ObjectId,
         ref:"MyUser"
     },
+   
 })
+
+const Archive=mongo.model("Archive",archiveSchema)
+
+const paymentSchema=new mongo.Schema({
+    user:{
+        type:mongo.Types.ObjectId,
+        ref:"MyUser"
+    },
+    paymentid:String,
+})
+
+const Payment=mongo.model("Payment",paymentSchema)
 
 module.exports={
     Vote:Vote,
     Survey:Survey,
     Comment:Comment,
     MyUser:MyUser,
+    Archive:Archive,
+    Payment:Payment,
 }

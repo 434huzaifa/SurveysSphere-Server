@@ -8,7 +8,7 @@ const cc = require("node-console-colors");
 const moment = require("moment")
 const stripe = require("stripe")(process.env.SK)
 const fs = require('fs');
-const { Vote, Survey, Comment, MyUser } = require('./Schema');
+const { Vote, Survey, Comment, MyUser, Payment } = require('./Schema');
 
 const app = express()
 const port = process.env.PORT || 5353
@@ -57,12 +57,16 @@ const isMightToken = async (req, res, next) => {
 
 async function run() {
     try {
-        app.get('/pro', logger, isThisToken, async (req, res) => {
+        app.post('/pro', logger, isThisToken, async (req, res) => {
+            let data=req.body
+            data.user=req.user.userid
             const user = await MyUser.findById(req.user.userid)
             if (user && user.role != "Pro") {
                 user.role = "Pro"
                 user.save()
-                res.send({ msg: "Congratulitons! We are happy have you as pro user" })
+                const payment=await Payment.create(data)
+                console.log("🔥 ~ file: index.js ~ line 67 ~ payment", payment)
+                res.send({ msg: "Congratulitons! We are happy to have you as pro user" })
             } else {
                 res.sendStatus(403)
             }
