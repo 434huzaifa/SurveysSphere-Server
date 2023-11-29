@@ -6,6 +6,7 @@ const cookie_pares = require("cookie-parser")
 const mongoose = require('mongoose');
 const cc = require("node-console-colors");
 const moment = require("moment")
+const stripe = require("stripe")(process.env.SK)
 const fs = require('fs');
 const { Vote, Survey, Comment, MyUser } = require('./Schema');
 
@@ -21,8 +22,6 @@ app.use(cors({
 app.use(express.json());
 const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@saaddb.bmj48ga.mongodb.net/SurveySphere?retryWrites=true&w=majority`
 mongoose.connect(uri)
-
-
 
 
 
@@ -48,17 +47,36 @@ const isMightToken = async (req, res, next) => {
     const token = req?.cookies?.huzaifa;
     if (!token) {
         req.user = undefined
-        return
     }
     jwt.verify(token, process.env.TOKEN, (error, decoded) => {
         req.user = decoded
-        next()
     })
+    next()
 }
 
 
 async function run() {
     try {
+        app.get('/pro', logger, isThisToken, async (req, res) => {
+            const user = await MyUser.findById(req.user.userid)
+            if (user && user.role != "Pro") {
+                user.role = "Pro"
+                user.save()
+                res.send({ msg: "Congratulitons! We are happy have you as pro user" })
+            } else {
+                res.sendStatus(403)
+            }
+        })
+        app.get("/payintent", logger, isThisToken, async (req, res) => {
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: 1000,
+                currency: "usd",
+                payment_method_types: ["card"],
+            });
+            res.send({
+                clientSecret: paymentIntent.client_secret,
+            });
+        });
         app.get('/surveychart', logger, async (req, res) => {
             const survey = req.query.id
             const votes = await Vote.where("survey").equals(survey).lean()
@@ -69,7 +87,6 @@ async function run() {
                 for (let index = 0; index < votes[0].options.length; index++) {
                     data.push(new Array(`Q${index + 1}`, 0, 0))
                 }
-                console.log(data);
                 for (const iterator of votes) {
                     for (let index = 0; index < iterator.options.length; index++) {
                         const element = iterator.options[index];
@@ -203,7 +220,8 @@ async function run() {
         })
         app.get("/getsurvey", logger, isMightToken, async (req, res) => {
             const id = req.query.id
-            const result = await Survey.findById(id).populate("createdby").lean() // lean makes it normal object or array. otherwise it will be immutable
+            console.log(id);
+            const result = await Survey.findById(id).populate("createdby").lean() // lean makes it normal object or array. otherwise it will be a mongoose object. Object and Mongoose Object are not same
             let isLike = 0
             let options = null
             if (req.user == undefined) {
