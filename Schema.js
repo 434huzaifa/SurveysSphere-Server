@@ -83,7 +83,7 @@ const surveySchema=new mongo.Schema({
     },
     isPublish:{
         type:Boolean,
-        default:false
+        default:true
     },
     reason:{
         type:String,
