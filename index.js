@@ -15,7 +15,10 @@ const port = process.env.PORT || 5353
 app.use(cookie_pares())
 app.use(cors({
     origin: [
-        'http://localhost:5173'
+        // 'http://localhost:5173'
+        'https://surveysphere-f19ed.web.app',
+        'https://surveysphere-f19ed.firebaseapp.com'
+
     ],
     credentials: true
 }));
