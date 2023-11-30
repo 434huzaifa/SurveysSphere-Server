@@ -63,9 +63,8 @@ async function run() {
             try {
                 const result = await Survey.findById(id)
                 result.title = data.title
-                result.expire = moment(data.expire, "MMMM DD, YYYY").toDate()
+                result.expire = moment(data.expire).toDate()
                 result.description = data.description
-                result.category = data.category
                 result.category = data.category
                 data.question = []
                 for (let index = 0; index < parseInt(data.qsize); index++) {
@@ -75,7 +74,7 @@ async function run() {
                 }
                 delete data.qsize
                 result.questions = data.question
-                result.isPublish=true
+                result.isPublish = true
                 result.save()
                 res.send(result)
             } catch (e) {
@@ -420,36 +419,40 @@ async function run() {
             res.send(comments)
         })
         app.get("/getsurvey", logger, isMightToken, async (req, res) => {
-            const id = req.query.id
-            console.log(id);
-            const result = await Survey.findById(id).populate("createdby").lean() // lean makes it normal object or array. otherwise it will be a mongoose object. Object and Mongoose Object are not same
-            let isLike = 0
-            let options = null
-            if (req.user == undefined) {
-                isLike = 0
-            } else {
-                let vote = await Vote.isExist(id, req.user.userid);
-                if (vote.length == 0) {
-                    isLike = 0
+            try {
 
+                const id = req.query.id
+                const result = await Survey.findById(id).populate("createdby").lean() // lean makes it normal object or array. otherwise it will be a mongoose object. Object and Mongoose Object are not same
+                result.isLike = 0
+                let options = null
+                if (req.user == undefined) {
+                    result.isLike = 0
                 } else {
-                    vote = vote[0]
-                    if (vote.options.length != 0) {
-                        options = vote.options
-                    }
-                    if (vote.like) {
-                        isLike = 1
-                    } else if (vote.like == null) {
-                        isLike = 0
-                    }
-                    else {
-                        isLike = 2
+                    let vote = await Vote.isExist(id, req.user.userid);
+                    if (vote.length == 0) {
+                        result.isLike = 0
+
+                    } else {
+                        vote = vote[0]
+                        if (vote.options.length != 0) {
+                            options = vote.options
+                        }
+                        if (vote.like) {
+                            result.isLike = 1
+                        } else if (vote.like == null) {
+                            result.isLike = 0
+                        }
+                        else {
+                            result.isLike = 2
+                        }
                     }
                 }
+                result.options = options
+                res.send(result)
+            } catch (e) {
+                console.log(`The Error is:${e.message}`);
+                res.status(500).send(`${e.message}`)
             }
-            result.isLike = isLike
-            result.options = options
-            res.send(result)
         })
         app.post('/insertuser', logger, async (req, res) => {
             const data = req.body
@@ -471,26 +474,32 @@ async function run() {
                 }
             } catch (error) {
                 console.log(`The Error is:${e.message}`);
+                res.status(500).send(`${e.message}`)
             }
 
         })
 
         app.post("/insertsurvey", logger, isThisToken, async (req, res) => {
-            let data = req.body
-            data.expire = moment(data.expire, "MMMM DD, YYYY").toDate()
-            data.createdby = req.user.userid
-            data.question = []
-            for (let index = 0; index < parseInt(data.qsize); index++) {
-                const element = data[`q${index}`]
-                data.question.push(element)
-                delete data[`q${index}`]
+            try {
+                let data = req.body
+                data.expire = moment(data.expire, "MMMM DD, YYYY").toDate()
+                data.createdby = req.user.userid
+                data.questions = []
+                for (let index = 0; index < parseInt(data.qsize); index++) {
+                    const element = data[`q${index}`]
+                    data.questions.push(element)
+                    delete data[`q${index}`]
+                }
+                delete data.qsize
+                let result = await Survey.create(data)
+                res.status(201).send(result)
+            } catch (e) {
+                console.log(`The Error is:${e.message}`);
+                res.status(500).send(`${e.message}`)
             }
-            delete data.qsize
-            let result = await Survey.create(data)
-            res.status(201).send(result)
         })
         app.get("/latestsurvey", logger, async (req, res) => {
-            let result = await Survey.where("isPublish").equals(true).limit(6)
+            let result = await Survey.where("isPublish").equals(true).sort({ createdAt: -1 }).limit(6).lean()
             res.status(200).send(result)
         })
         app.post('/jsonwebtoken', logger, async (req, res) => {
