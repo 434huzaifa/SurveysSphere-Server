@@ -15,9 +15,9 @@ const port = process.env.PORT || 5353
 app.use(cookie_pares())
 app.use(cors({
     origin: [
-        // 'http://localhost:5173'
-        'https://surveysphere-f19ed.web.app',
-        'https://surveysphere-f19ed.firebaseapp.com'
+        'http://localhost:5173'
+        // 'https://surveysphere-f19ed.web.app',
+        // 'https://surveysphere-f19ed.firebaseapp.com'
 
     ],
     credentials: true
@@ -282,7 +282,6 @@ async function run() {
                 user.role = "Pro"
                 await user.save()
                 const payment = await Payment.create(data)
-                console.log("🔥 ~ file: index.js ~ line 67 ~ payment", payment)
                 res.send({ msg: "Congratulitons! We are happy to have you as pro user" })
             } else {
                 res.sendStatus(403)
@@ -301,11 +300,10 @@ async function run() {
         app.get('/surveychart', logger, async (req, res) => {
             try {
                 const survey = req.query.id
-                const votes = await Vote.where("survey").equals(survey).lean()
+                const votes = await Vote.find({ survey: survey, options: { $exists: true, $not: { $size: 0 } } }).lean()
                 let data = new Array()
                 data.push(new Array("Options", "True", "False"))
                 if (votes.length != 0) {
-
                     for (let index = 0; index < votes[0].options.length; index++) {
                         data.push(new Array(`Q${index + 1}`, 0, 0))
                     }
@@ -323,8 +321,10 @@ async function run() {
                         }
                     }
                 }
+                
                 res.send(data)
             } catch (e) {
+                
                 console.log(`The Error is:${e.message}`);
                 res.status(500).send(`${e.message}`)
             }
